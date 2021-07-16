@@ -27,7 +27,7 @@ class RenderProcessor(Processor):
 
     def __init__(self):
         super().__init__()
-        self.scale = 4.0
+        self.scale = 2.0
         self.size = self.width, self.height = 800, 600
         self.window = pygame.display.set_mode(self.size,
                                               pygame.HWSURFACE | pygame.DOUBLEBUF)
