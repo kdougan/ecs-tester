@@ -1,6 +1,5 @@
 import random
 from time import time
-from typing import Tuple
 
 import pygame
 from pygame import Vector2
@@ -37,6 +36,9 @@ class RenderProcessor(Processor):
         self.font_image = pygame.image.load('./src/assets/font.png').convert()
         self.font_image.set_colorkey((255, 255, 255))
 
+        self.test_fill = pygame.image.load(
+            './src/assets/test_fill.png').convert()
+
     def process(self, dt) -> None:
         self.display.fill((30, 10, 30))
 
@@ -52,12 +54,16 @@ class RenderProcessor(Processor):
                 surf = pygame.transform.scale(
                     renderable.surface,
                     (max(int(size.width * size.scale), 0),
-                     max(int(size.height * size.scale), 0))
-                )
+                     max(int(size.height * size.scale), 0)))
+
             anchor = self.get_anchor_offsets(size, surf)
-            layers.setdefault(renderable.layer, []).append(
-                (surf, Vector2(position.x + position.offset.x + anchor.x,
-                               position.y + position.offset.y + anchor.y)))
+            actual_pos = position + position.offset + anchor
+            if not self.check_visible(surf, actual_pos):
+                continue
+
+            layers.setdefault(renderable.layer, []).append((surf, actual_pos))
+
+        self.display.blit(self.test_fill, (0, 0))
 
         for layer in sorted(layers):
             for surf, pos in layers[layer]:
@@ -67,9 +73,10 @@ class RenderProcessor(Processor):
 
         self.window.blit(pygame.transform.scale(
             self.display, self.size), (0, 0))
+
         pygame.display.flip()
 
-    def get_text_surf(self, ent) -> pygame.Surface:
+    def get_text_surf(self, ent: int) -> pygame.Surface:
         chars = list(char_widths.keys())
 
         for ent in self.text_surfs:
@@ -99,7 +106,7 @@ class RenderProcessor(Processor):
         self.color_surface(self.text_surfs[ent], *text.color)
         return self.text_surfs[ent]
 
-    def get_anchor_offsets(self, size, surface) -> Tuple[int, int]:
+    def get_anchor_offsets(self, size: object, surface: pygame.Surface) -> Vector2:
         offset = Vector2(0, 0)
         width, height = surface.get_width(), surface.get_height()
         if size.anchor == AlignmentType.top_center:
@@ -124,25 +131,33 @@ class RenderProcessor(Processor):
             offset.y -= height
         return offset
 
-    def color_surface(self, surface, red, green, blue) -> None:
+    def color_surface(self, surface: pygame.Surface, red: int, green: int, blue: int) -> None:
         arr = pygame.surfarray.pixels3d(surface)
         arr[:, :, 0] = red
         arr[:, :, 1] = green
         arr[:, :, 2] = blue
 
+    def check_visible(self, surf: pygame.Surface, pos: Vector2) -> bool:
+        surf_rect = surf.get_rect()
+        window_rect = self.window.get_rect()
+        return (
+            pos.x + surf_rect.width >= window_rect.x
+            and pos.y + surf_rect.height >= window_rect.y
+            and pos.x <= window_rect.x + window_rect.width
+            and pos.y <= window_rect.y + window_rect.height
+        )
+
 
 class MovementProcessor(Processor):
     def process(self, dt: float):
-        render_processor = self.world.get_processor(RenderProcessor)
-
         for ent, position in self.world.get_component(Position):
             position.x += position.delta.x
             position.y += position.delta.y
 
             if self.world.try_component(ent, FollowMouse):
                 pos = pygame.mouse.get_pos()
-                position.x = pos[0] / render_processor.scale
-                position.y = pos[1] / render_processor.scale
+                position.x = pos[0]
+                position.y = pos[1]
                 continue
             if position.attach:
                 attach_position = self.world.try_component(
@@ -156,62 +171,60 @@ class MovementProcessor(Processor):
 
 
 class PhysicsProcessor(Processor):
-    def __init__(self, friction: float = 0.1):
+    def __init__(self, friction: float = 0.99):
         super().__init__()
         self.friction = friction
 
     def process(self, dt: float):
         for ent, (physics, position) in self.world.get_components(Physics, Position):
-            physics.velocity.x *= self.friction
-            physics.velocity.y *= self.friction
+            physics.velocity *= (1-(self.friction * dt))
 
-            if physics.velocity.x < 0.01 and physics.velocity.x > -0.01:
+            if abs(physics.velocity.x) < 0.001:
                 physics.velocity.x = 0
-            if physics.velocity.y < 0.01 and physics.velocity.y > -0.01:
+            if abs(physics.velocity.y) < 0.001:
                 physics.velocity.y = 0
 
-            position.delta.x += physics.velocity.x * dt
-            position.delta.y += physics.velocity.y * dt
+            position.delta += physics.velocity * dt
 
 
 class CollisionProcessor(Processor):
     def process(self, dt: float):
         processed = set()
-        # for ent, (position, size, collider) in self.world.get_components(Position, Size, Collider):
-        #     if not position.delta.x or not position.delta.y:
-        #         # if the entity hasnt moved since last frame, ignore it
-        #         continue
-        #     for other_ent, (other_position, other_size, other_collider) in self.world.get_components(Position, Size, Collider):
-        #         combo = str(sorted([ent, other_ent]))
-        #         if ent == other_ent or combo in processed:
-        #             continue
+        for ent, (position, size, _) in self.world.get_components(Position, Size, Collider):
+            if not position.delta.x or not position.delta.y:
+                # if the entity hasnt moved since last frame, ignore it
+                continue
+            for other_ent, (other_position, other_size, _) in self.world.get_components(Position, Size, Collider):
+                key = str(sorted([ent, other_ent]))
+                if ent == other_ent or key in processed:
+                    continue
 
-        #         rect = self.get_collider_rect(position, size)
-        #         other_rect = self.get_collider_rect(other_position, other_size)
+                rect = self.get_collider_rect(position, size)
+                other_rect = self.get_collider_rect(other_position, other_size)
 
-        #         # TODO: handle collisions
-        #         # get the direction of each position's movement
-        #         rect.x += position.delta.x
-        #         if rect.colliderect(other_rect):
-        #             moving_right = position.delta.x > 0
-        #             moving_left = position.delta.x < 0
-        #             if moving_right and rect.right > other_rect.left:
-        #                 rect.right = other_rect.left
-        #             if moving_left and rect.left < other_rect.right:
-        #                 rect.left = other_rect.right
+                # TODO: handle collisions
+                # get the direction of each position's movement
+                rect.x += position.delta.x
+                if rect.colliderect(other_rect):
+                    moving_right = position.delta.x > 0
+                    moving_left = position.delta.x < 0
+                    if moving_right and rect.right > other_rect.left:
+                        rect.right = other_rect.left
+                    if moving_left and rect.left < other_rect.right:
+                        rect.left = other_rect.right
 
-        #         rect.y += position.delta.y
-        #         if rect.colliderect(other_rect):
-        #             moving_up = position.delta.y > 0
-        #             moving_down = position.delta.y < 0
-        #             if moving_up and rect.top > other_rect.bottom:
-        #                 rect.top = other_rect.bottom
-        #             if moving_down and rect.bottom < other_rect.top:
-        #                 rect.bottom = other_rect.top
-        #         position.delta.x = rect.x - position.x
-        #         position.delta.y = rect.y - position.y
+                rect.y += position.delta.y
+                if rect.colliderect(other_rect):
+                    moving_up = position.delta.y > 0
+                    moving_down = position.delta.y < 0
+                    if moving_up and rect.top > other_rect.bottom:
+                        rect.top = other_rect.bottom
+                    if moving_down and rect.bottom < other_rect.top:
+                        rect.bottom = other_rect.top
+                position.delta.x = rect.x - position.x
+                position.delta.y = rect.y - position.y
 
-        #         processed.add(combo)
+                processed.add(key)
 
     def get_collider_rect(self, position: Position, size: Size) -> pygame.Rect:
         return pygame.Rect(position.x, position.y, size.width * size.scale, size.height * size.scale)
@@ -251,8 +264,9 @@ class ParticleProcessor(Processor):
             Particle(emitter.particle_lifetime,
                      particle_type=emitter.particle_type),
             Renderable((size, size), color=(255, 255, 255)),
-            Physics(velocity=(random.randint(-40, 40), random.randint(-40, 40)))
-        )
+            Physics(velocity=(random.randint(-100, 100),
+                    random.randint(-100, 100)))
+        ) if random.random() < emitter.spawn_chance else None
 
 
 class EventProcessor(Processor):
@@ -293,12 +307,13 @@ class EventProcessor(Processor):
                 clickable.pressed_start_time = time()
                 self.clicked = ent
         if not self.clicked:
-            print('create emmitter', pos)
+            # print('create emmitter', pos)
             self.world.create_entity(
-                # ParticleEmitter(rate=.01, particle_lifetime=4.0),
-                Renderable(color=(255, 255, 255), size=(32, 32)),
+                ParticleEmitter(rate=.01, particle_lifetime=4.0,
+                                spawn_chance=random.random()),
+                Renderable(color=(255, 255, 255), size=(8, 8)),
                 Position(pos),
-                Size(32, 32),
+                Size(),
                 PlayerControlled()
             )
 

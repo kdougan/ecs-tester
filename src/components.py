@@ -22,9 +22,13 @@ class Position(Vector2):
             The y coordinate of the component.
     """
 
-    def __init__(self, x: float = 0.0, y: float = 0.0, offset: Tuple[int, int] = (0, 0), attach: int = None):
+    def __init__(self,
+                 x: float = 0.0,
+                 y: float = 0.0,
+                 offset: Tuple[int, int] = (0, 0),
+                 attach: int = None):
         super().__init__(x, y)
-        self.delta = Vector2(x, y)
+        self.delta = Vector2(0, 0)
         self.offset = Vector2(offset[0], offset[1])
         self.attach = attach
 
@@ -40,7 +44,11 @@ class Size(Vector2):
             The height of the component.
     """
 
-    def __init__(self, width: float = 0.0, height: float = 0.0, anchor: AlignmentType = AlignmentType.top_left, scale: float = 1.0):
+    def __init__(self,
+                 width: float = 0.0,
+                 height: float = 0.0,
+                 anchor: AlignmentType = AlignmentType.top_left,
+                 scale: float = 1.0):
         super().__init__(width, height)
         self.anchor = anchor
         self.scale = scale
@@ -73,7 +81,9 @@ class Collider:
             True if the collider is fixed, False otherwise.
     """
 
-    def __init__(self, anchor: AlignmentType = AlignmentType.center, fixed: bool = False) -> None:
+    def __init__(self,
+                 anchor: AlignmentType = AlignmentType.center,
+                 fixed: bool = False) -> None:
         self.anchor = anchor
         self.fixed = fixed
 
@@ -102,6 +112,10 @@ class Physics:
             The velocity of the component.
         acceleration : float
             The acceleration of the component.
+        mass : float
+            The mass of the component.
+        density : float
+            The density of the component.
     """
 
     def __init__(self,
@@ -127,7 +141,9 @@ class Particle:
             The emitter of the particle.
     """
 
-    def __init__(self, lifetime: float = 1.0, particle_type: ParticleType = ParticleType.none) -> None:
+    def __init__(self,
+                 lifetime: float = 1.0,
+                 particle_type: ParticleType = ParticleType.none) -> None:
         self.lifetime = lifetime
         self.age = 0
         self.type = particle_type
@@ -148,15 +164,23 @@ class ParticleEmitter:
             The number of particles in the system.
         particle_type : ParticleType
             The type of particle.
+        spawn_chance : float
+            The chance of spawning a new particle.
     """
 
-    def __init__(self, rate: float = 1.0, particle_lifetime: float = 1.0, particle_count: int = None, particle_type: ParticleType = None):
+    def __init__(self,
+                 rate: float = 1.0,
+                 particle_lifetime: float = 1.0,
+                 particle_count: int = None,
+                 particle_type: ParticleType = None,
+                 spawn_chance=1.0):
         self.rate = rate
         self.last_spawn = rate
         self.particle_lifetime = particle_lifetime
         self.particle_count = particle_count
         self.particle_type = particle_type
         self.particles = set()
+        self.spawn_chance = spawn_chance
 
 
 class Renderable:
@@ -178,7 +202,13 @@ class Renderable:
 
     paths = {}
 
-    def __init__(self, size: tuple = None, file_path: str = None, visible: bool = True, is_animated: bool = False, color: tuple = None, layer: LayerType = LayerType.none) -> None:
+    def __init__(self,
+                 size: tuple = None,
+                 file_path: str = None,
+                 visible: bool = True,
+                 is_animated: bool = False,
+                 color: tuple = None,
+                 layer: LayerType = LayerType.none) -> None:
         self.file_path = file_path
         self.is_animated = is_animated
         self.surface = None
@@ -243,7 +273,8 @@ class Clickable:
 
 
 class Camera:
-    def __init__(self, position: Tuple[float, float] = (0.0, 0.0),
+    def __init__(self,
+                 position: Tuple[float, float] = (0.0, 0.0),
                  zoom: float = 1.0,
                  target: int = None):
         self.position = Vector2(*position)
